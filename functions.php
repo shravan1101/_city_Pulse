@@ -1,14 +1,141 @@
 <?php
-define('DATA_FILE', __DIR__ . '/data.json');
-define('ADMIN_FILE', __DIR__ . '/admin.json');
-define('UPLOAD_DIR', __DIR__ . '/uploads/');
-if(!file_exists(UPLOAD_DIR)) mkdir(UPLOAD_DIR, 0755, true);
-function read_issues(){if(!file_exists(DATA_FILE)) file_put_contents(DATA_FILE, json_encode([]));$json=file_get_contents(DATA_FILE);$arr=json_decode($json,true);if(!is_array($arr))$arr=[];return $arr;}
-function write_issues($arr){file_put_contents(DATA_FILE,json_encode(array_values($arr),JSON_PRETTY_PRINT));}
-function new_id($arr){$max=0;foreach($arr as $a)if(isset($a['id'])&&$a['id']>$max)$max=$a['id'];return $max+1;}
-function save_image($file){if(!$file||$file['error']!==UPLOAD_ERR_OK)return ''; $allowed=['image/png','image/jpeg','image/jpg','image/gif'];if(!in_array($file['type'],$allowed))return ''; $ext=pathinfo($file['name'],PATHINFO_EXTENSION);$name=time().'_'.bin2hex(random_bytes(5)).'.'.$ext;$dest=UPLOAD_DIR.$name;if(move_uploaded_file($file['tmp_name'],$dest))return 'uploads/'.$name;return '';}
-function ensure_admin(){if(!file_exists(ADMIN_FILE)){$default=['username'=>'admin','password'=>password_hash('admin123',PASSWORD_DEFAULT)];file_put_contents(ADMIN_FILE,json_encode($default,JSON_PRETTY_PRINT));}}
-function check_admin($user,$pass){ensure_admin();$j=json_decode(file_get_contents(ADMIN_FILE),true);if(!$j)return false;if($j['username']!==$user)return false;return password_verify($pass,$j['password']);}
-function require_admin(){session_start();if(empty($_SESSION['is_admin'])){header('Location: login.php');exit;}}
-function delete_image_file($relpath){$p=__DIR__.'/'.$relpath;if(file_exists($p)&&is_file($p))@unlink($p);}
+// ===============================
+// Admin check & auto-create logic
+// ===============================
+function check_admin($username, $password) {
+    $file = __DIR__ . '/admin.json';
+
+    // If missing or empty, auto-create default admin
+    if (!file_exists($file) || filesize($file) == 0) {
+        $default = [
+            'username' => 'admin',
+            'password' => password_hash('admin123', PASSWORD_DEFAULT)
+        ];
+        file_put_contents($file, json_encode($default, JSON_PRETTY_PRINT));
+    }
+
+    $adminData = json_decode(file_get_contents($file), true);
+
+    if (!$adminData || !isset($adminData['username'], $adminData['password'])) {
+        return false;
+    }
+
+    return $username === $adminData['username'] &&
+           password_verify($password, $adminData['password']);
+}
+
+// ===============================
+// Complaint (Issue) Handling
+// ===============================
+
+// Read all complaints from data.json
+function read_issues() {
+    $file = __DIR__ . '/data.json';
+
+    // Create file if missing
+    if (!file_exists($file)) {
+        file_put_contents($file, json_encode([], JSON_PRETTY_PRINT));
+    }
+
+    $json = file_get_contents($file);
+    $data = json_decode($json, true);
+
+    if (!is_array($data)) {
+        $data = [];
+    }
+
+    return $data;
+}
+
+// Save a new complaint
+function save_issue($issue) {
+    $file = __DIR__ . '/data.json';
+    $issues = read_issues();
+    $issues[] = $issue;
+    file_put_contents($file, json_encode($issues, JSON_PRETTY_PRINT));
+}
+
+// Delete a complaint by its index
+function delete_issue($index) {
+    $file = __DIR__ . '/data.json';
+    $issues = read_issues();
+
+    if (isset($issues[$index])) {
+        unset($issues[$index]);
+        file_put_contents($file, json_encode(array_values($issues), JSON_PRETTY_PRINT));
+    }
+}
+
+// ===============================
+// Image Upload Helper
+// ===============================
+function handle_upload($fileField) {
+    if (!isset($_FILES[$fileField]) || $_FILES[$fileField]['error'] !== UPLOAD_ERR_OK) {
+        return null;
+    }
+
+    $uploadsDir = __DIR__ . '/uploads/';
+    if (!is_dir($uploadsDir)) {
+        mkdir($uploadsDir, 0777, true);
+    }
+
+    $filename = uniqid() . '_' . basename($_FILES[$fileField]['name']);
+    $target = $uploadsDir . $filename;
+
+    if (move_uploaded_file($_FILES[$fileField]['tmp_name'], $target)) {
+        return 'uploads/' . $filename;
+    }
+
+    return null;
+}
+
+
+
+// ===============================
+// Require admin login check
+// ===============================
+function require_admin() {
+    session_start();
+    if (empty($_SESSION['is_admin'])) {
+        header('Location: login.php');
+        exit;
+    }
+}
+// ===============================
+// Write (update) all issues to data.json
+// ===============================
+function write_issues($issues) {
+    $file = __DIR__ . '/data.json';
+    file_put_contents($file, json_encode($issues, JSON_PRETTY_PRINT));
+}
+
+// ===============================
+// Backward compatibility alias for old name
+// ===============================
+function save_image($field) {
+    return handle_upload($field);
+}
+
+// ===============================
+// Generate a new unique ID for each issue
+// ===============================
+function new_id($issues) {
+    if (empty($issues)) return 1;
+
+    // Get all existing IDs
+    $ids = array_column($issues, 'id');
+    return max($ids) + 1;
+}
+
+// ===============================
+// Delete the image file from uploads folder if it exists
+// ===============================
+function delete_image_file($path) {
+    if (!$path) return;
+    $full = __DIR__ . '/' . $path;
+    if (file_exists($full)) {
+        unlink($full);
+    }
+}
+
 ?>
