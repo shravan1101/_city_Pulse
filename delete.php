@@ -1,0 +1,1 @@
+<?php require_once'functions.php';require_admin();$id=intval($_GET['id']??0);$arr=read_issues();$new=[];foreach($arr as $a){if($a['id']==$id){if(!empty($a['image']))delete_image_file($a['image']);continue;}$new[]=$a;}write_issues($new);header('Location: admin.php');?>

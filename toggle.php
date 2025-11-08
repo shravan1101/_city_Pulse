@@ -1,0 +1,1 @@
+<?php require_once'functions.php';require_admin();$id=intval($_GET['id']??0);$arr=read_issues();foreach($arr as &$a){if($a['id']==$id){$a['status']=($a['status']??'Pending')==='Resolved'?'Pending':'Resolved';break;}}write_issues($arr);header('Location: admin.php');?>
